@@ -13,3 +13,7 @@ wheels/
 
 /playground.py
 
+.env
+.env.*
+!.env.example
+*.log

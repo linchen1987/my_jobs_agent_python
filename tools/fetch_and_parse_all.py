@@ -43,7 +43,7 @@ def fetch_and_parse_all(source_url_list: List[str], offset: int = 0, limit: Opti
     # Step 2: 根据参数过滤帖子列表
     total_posts = len(all_posts)
     
-    if offset > 0 or limit is not None:
+    if offset > 0 or (limit is not None and limit > 0):
         logger.info("Step 2: 应用过滤参数...")
         logger.debug(f"   - 从第 {offset + 1} 个开始")
         if limit is not None:

@@ -44,6 +44,7 @@ def create_job_analysis_prompt(title: str, content: str, categories: List[Dict])
 1. 是否是招聘信息
 2. 不是一次性项目，而是长期的全职或兼职工作
 3. 是开发类工作，不是产品运营类
+4. 过滤掉时薪**明显**低于 100 元的工作
 
 ## 请按以下格式返回分析结果：
 
@@ -55,7 +56,7 @@ def create_job_analysis_prompt(title: str, content: str, categories: List[Dict])
         "is_long_term": true/false, 
         "is_development": true/false,
         "salary_meets_requirement": true/false/null,
-        "reasoning": "详细分析原因"
+        "reasoning": "详细分析原因（20 字以内，尽量少）"
     }},
     "extracted_info": {{
         "company_introduction": "公司/产品介绍",

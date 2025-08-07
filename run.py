@@ -14,10 +14,10 @@ from tools.analyze_data import analyze_job_with_llm
 load_dotenv()
 
 source_list: list[str] = [
-    "https://svc.eleduck.com/api/v1/posts?page=2"
+    "https://svc.eleduck.com/api/v1/posts?page=1"
 ]
 OFFSET = 0
-LIMIT = 4
+LIMIT = 0
 
 # 配置日志
 log_level = os.getenv('LOG_LEVEL', 'INFO').upper()

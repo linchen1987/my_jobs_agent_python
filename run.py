@@ -16,6 +16,7 @@ from typing import List, Dict, Any, Tuple
 from tools.fetch_and_parse_all import fetch_and_parse_all
 from tools.llm_openai import OpenAIChat
 from tools.analyze_data import analyze_job_with_llm
+from tools.telegram import notify_jobs, is_configured as telegram_configured
 from storage import create_storage_from_env, StorageClient
 
 # 加载环境变量
@@ -23,7 +24,7 @@ load_dotenv()
 
 source_list: list[str] = ["https://svc.eleduck.com/api/v1/posts?page=1"]
 OFFSET = 0
-LIMIT = 1
+LIMIT = 0
 
 # 配置日志
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -372,6 +373,14 @@ async def handle_results(
     # 保存新的符合条件的职位到通知文件
     if new_qualified_jobs:
         await save_notifications(new_qualified_jobs)
+
+    if new_qualified_jobs and telegram_configured():
+        print("📲 发送 Telegram 通知...")
+        success = notify_jobs(new_qualified_jobs)
+        if success:
+            print("✅ Telegram 通知已发送")
+        else:
+            print("⚠️ Telegram 通知发送失败")
 
 
 async def main():

@@ -8,22 +8,22 @@
 import os
 import json
 import logging
+import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Tuple
 
 from tools.fetch_and_parse_all import fetch_and_parse_all
-
-# from tools.config import source_list
 from tools.llm_openai import OpenAIChat
 from tools.analyze_data import analyze_job_with_llm
+from storage import create_storage_from_env, StorageClient
 
 # 加载环境变量
 load_dotenv()
 
-source_list: list[str] = ["https://svc.eleduck.com/api/v1/posts?page=2"]
+source_list: list[str] = ["https://svc.eleduck.com/api/v1/posts?page=1"]
 OFFSET = 0
-LIMIT = 0
+LIMIT = 1
 
 # 配置日志
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -33,8 +33,11 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+# 全局存储客户端
+storage: StorageClient = None
 
-def save_notifications(new_qualified_jobs: List[Dict[str, Any]]) -> None:
+
+async def save_notifications(new_qualified_jobs: List[Dict[str, Any]]) -> None:
     """
     保存新的符合条件的职位到通知文件
 
@@ -44,17 +47,16 @@ def save_notifications(new_qualified_jobs: List[Dict[str, Any]]) -> None:
     if not new_qualified_jobs:
         return
 
-    notifications_path = ".data/jobs_notifications.md"
+    notifications_path = "jobs_notifications.md"
 
     # 生成新通知的Markdown内容
     new_notification_content = create_notification_markdown(new_qualified_jobs)
 
     # 加载现有通知内容
     existing_content = ""
-    if os.path.exists(notifications_path):
+    if await storage.exists(notifications_path):
         try:
-            with open(notifications_path, "r", encoding="utf-8") as f:
-                existing_content = f.read()
+            existing_content = await storage.read_text(notifications_path)
         except Exception as e:
             print(f"⚠️ 加载现有通知失败: {e}")
             existing_content = ""
@@ -67,8 +69,7 @@ def save_notifications(new_qualified_jobs: List[Dict[str, Any]]) -> None:
 
     # 保存通知文件
     try:
-        with open(notifications_path, "w", encoding="utf-8") as f:
-            f.write(all_content)
+        await storage.write_text(notifications_path, all_content)
         print(
             f"\n📢 发现 {len(new_qualified_jobs)} 个新职位，已保存到 {notifications_path}"
         )
@@ -197,7 +198,7 @@ def create_markdown_table(qualified_jobs: List[Dict[str, Any]]) -> str:
     return markdown
 
 
-def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+async def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     数据处理函数：负责抓取数据、分析招聘信息
 
@@ -221,16 +222,16 @@ def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
 
     print(f"\n📊 获取到 {len(all_jobs_data)} 个招聘信息，开始分析...")
 
-    # 确保.data目录存在
-    os.makedirs(".data", exist_ok=True)
+    # 确保存储根目录存在
+    await storage.ensure_dir(".")
 
     # 加载已分析记录表
     analyzed_jobs = []
-    analyzed_json_path = ".data/analyzed_jobs.json"
-    if os.path.exists(analyzed_json_path):
+    analyzed_json_path = "analyzed_jobs.json"
+    if await storage.exists(analyzed_json_path):
         try:
-            with open(analyzed_json_path, "r", encoding="utf-8") as f:
-                analyzed_jobs = json.load(f)
+            content = await storage.read_text(analyzed_json_path)
+            analyzed_jobs = json.loads(content)
         except Exception as e:
             print(f"⚠️ 加载已分析记录失败: {e}")
             analyzed_jobs = []
@@ -303,7 +304,7 @@ def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     return new_analyzed_records, new_qualified_jobs
 
 
-def handle_results(
+async def handle_results(
     new_analyzed_records: List[Dict[str, Any]], new_qualified_jobs: List[Dict[str, Any]]
 ) -> None:
     """
@@ -316,25 +317,25 @@ def handle_results(
     print("\n=== 开始后续动作阶段 ===\n")
 
     # 加载现有数据
-    analyzed_json_path = ".data/analyzed_jobs.json"
-    jobs_json_path = ".data/jobs.json"
+    analyzed_json_path = "analyzed_jobs.json"
+    jobs_json_path = "jobs.json"
 
     # 加载现有的已分析记录
     existing_analyzed_jobs = []
-    if os.path.exists(analyzed_json_path):
+    if await storage.exists(analyzed_json_path):
         try:
-            with open(analyzed_json_path, "r", encoding="utf-8") as f:
-                existing_analyzed_jobs = json.load(f)
+            content = await storage.read_text(analyzed_json_path)
+            existing_analyzed_jobs = json.loads(content)
         except Exception as e:
             print(f"⚠️ 加载现有已分析记录失败: {e}")
             existing_analyzed_jobs = []
 
     # 加载现有的符合条件的结果
     existing_qualified_results = []
-    if os.path.exists(jobs_json_path):
+    if await storage.exists(jobs_json_path):
         try:
-            with open(jobs_json_path, "r", encoding="utf-8") as f:
-                existing_qualified_results = json.load(f)
+            content = await storage.read_text(jobs_json_path)
+            existing_qualified_results = json.loads(content)
         except Exception as e:
             print(f"⚠️ 加载现有符合条件结果失败: {e}")
             existing_qualified_results = []
@@ -344,8 +345,9 @@ def handle_results(
 
     # 保存已分析记录表
     print(f"💾 保存已分析记录表...（总共 {len(all_analyzed_jobs)} 个已分析记录）")
-    with open(analyzed_json_path, "w", encoding="utf-8") as f:
-        json.dump(all_analyzed_jobs, f, ensure_ascii=False, indent=2)
+    await storage.write_text(
+        analyzed_json_path, json.dumps(all_analyzed_jobs, ensure_ascii=False, indent=2)
+    )
 
     # 合并符合条件的数据：新数据在前面
     all_qualified_jobs = new_qualified_jobs + existing_qualified_results
@@ -354,34 +356,41 @@ def handle_results(
     print(
         f"💾 保存符合条件的数据...（总共 {len(all_qualified_jobs)} 个符合条件的招聘信息）"
     )
-    with open(jobs_json_path, "w", encoding="utf-8") as f:
-        json.dump(all_qualified_jobs, f, ensure_ascii=False, indent=2)
+    await storage.write_text(
+        jobs_json_path, json.dumps(all_qualified_jobs, ensure_ascii=False, indent=2)
+    )
 
     # 生成Markdown
     print("📝 生成Markdown报告...")
     markdown_content = create_markdown_table(all_qualified_jobs)
 
     # 写入文件
-    with open(".data/jobs.md", "w", encoding="utf-8") as f:
-        f.write(markdown_content)
+    await storage.write_text("jobs.md", markdown_content)
 
     print("✅ 报告已保存到 jobs.json 和 jobs.md")
 
     # 保存新的符合条件的职位到通知文件
     if new_qualified_jobs:
-        save_notifications(new_qualified_jobs)
+        await save_notifications(new_qualified_jobs)
 
 
-def main():
+async def main():
     """主函数：协调数据处理和后续动作"""
+    global storage
+
     print("=== 开始招聘信息分析流程 ===\n")
+
+    # 初始化存储客户端
+    storage = create_storage_from_env()
+    storage_type = os.getenv("STORAGE_TYPE", "local")
+    print(f"📦 存储类型: {storage_type}\n")
 
     try:
         # 第一阶段：数据处理
-        new_analyzed_records, new_qualified_jobs = process_data()
+        new_analyzed_records, new_qualified_jobs = await process_data()
 
         # 第二阶段：后续动作
-        handle_results(new_analyzed_records, new_qualified_jobs)
+        await handle_results(new_analyzed_records, new_qualified_jobs)
 
         print(f"\n🎉 流程完成！新增 {len(new_qualified_jobs)} 个符合条件的招聘信息")
 
@@ -393,4 +402,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

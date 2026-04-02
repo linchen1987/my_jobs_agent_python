@@ -10,6 +10,7 @@ wheels/
 .venv
 
 .data
+.data.bak
 
 /playground.py
 
@@ -17,3 +18,4 @@ wheels/
 .env.*
 !.env.example
 *.log
+*.local

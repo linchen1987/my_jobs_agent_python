@@ -22,7 +22,7 @@ from storage import create_storage_from_env, StorageClient
 # 加载环境变量
 load_dotenv()
 
-source_list: list[str] = ["https://svc.eleduck.com/api/v1/posts?page=1"]
+source_list: list[str] = ["https://svc.eleduck.com/api/v1/posts?page=1", "https://svc.eleduck.com/api/v1/posts?page=2"]
 OFFSET = 0
 LIMIT = 0
 

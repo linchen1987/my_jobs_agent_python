@@ -11,7 +11,7 @@ import logging
 
 from dotenv import load_dotenv
 
-from storage import StorageClient, create_storage_from_env
+from jobs_agent.storage import StorageClient, create_storage_from_env
 
 load_dotenv()
 

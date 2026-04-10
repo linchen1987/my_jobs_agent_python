@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from notify.telegram import notify_jobs
+from jobs_agent.notify.telegram import notify_jobs
 
 load_dotenv()
 

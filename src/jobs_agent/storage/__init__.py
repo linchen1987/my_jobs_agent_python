@@ -8,9 +8,9 @@ import os
 import logging
 from typing import Literal
 
-from .base import StorageClient, FileStat
-from .local import LocalStorageClient
-from .s3 import S3StorageClient
+from jobs_agent.storage.base import StorageClient, FileStat
+from jobs_agent.storage.local import LocalStorageClient
+from jobs_agent.storage.s3 import S3StorageClient
 
 logger = logging.getLogger(__name__)
 

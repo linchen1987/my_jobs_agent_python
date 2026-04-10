@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Union
 
-from .base import StorageClient, FileStat
+from jobs_agent.storage.base import StorageClient, FileStat
 
 logger = logging.getLogger(__name__)
 

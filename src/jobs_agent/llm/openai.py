@@ -2,7 +2,7 @@ import os
 import time
 import requests
 
-from llm.base import BaseLLM
+from jobs_agent.llm.base import BaseLLM
 
 
 class OpenAIChat(BaseLLM):

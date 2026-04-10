@@ -12,7 +12,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from .base import StorageClient, FileStat
+from jobs_agent.storage.base import StorageClient, FileStat
 
 logger = logging.getLogger(__name__)
 

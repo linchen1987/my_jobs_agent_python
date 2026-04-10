@@ -39,7 +39,7 @@ jobs:
           TELEGRAM_ENABLED: ${{ secrets.TELEGRAM_ENABLED }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: uv run run.py
+        run: uv run python -m jobs_agent
 
       - name: Keepalive Workflow
         shell: bash

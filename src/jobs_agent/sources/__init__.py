@@ -1,7 +1,7 @@
 import os
 import logging
 
-from sources.base import BaseSource
+from jobs_agent.sources.base import BaseSource
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ def create_sources_from_env() -> list[BaseSource]:
         "yes",
     )
     if eleduck_enabled:
-        from sources.eleduck import EleduckSource
+        from jobs_agent.sources.eleduck import EleduckSource
 
         pages = int(os.getenv("ELEDUCK_PAGES", "2"))
         offset = int(os.getenv("ELEDUCK_OFFSET", "0"))

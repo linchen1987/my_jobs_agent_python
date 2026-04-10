@@ -7,7 +7,7 @@
 
 import sys
 from dotenv import load_dotenv
-from sources.eleduck import EleduckSource
+from jobs_agent.sources.eleduck import EleduckSource
 
 load_dotenv()
 

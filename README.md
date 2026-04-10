@@ -39,7 +39,7 @@ cp .env.example .env
 # 编辑 .env 填入必要的配置
 
 # 运行完整流程
-uv run run.py
+uv run python -m jobs_agent
 
 # 数据迁移（旧格式 → Phase 1 新格式，只需运行一次）
 uv run migrate.py
@@ -60,8 +60,8 @@ uv run debug-fetch-eleduck.py https://eleduck.com/posts/L5fbk3
 
 ```bash
 # 只抓第 11 条（跳过前 10 条）
-ELEDUCK_OFFSET=10 ELEDUCK_LIMIT=1 uv run run.py
+ELEDUCK_OFFSET=10 ELEDUCK_LIMIT=1 uv run python -m jobs_agent
 
 # 只抓 1 页，取前 2 条
-ELEDUCK_PAGES=1 ELEDUCK_OFFSET=0 ELEDUCK_LIMIT=2 uv run run.py
+ELEDUCK_PAGES=1 ELEDUCK_OFFSET=0 ELEDUCK_LIMIT=2 uv run python -m jobs_agent
 ```

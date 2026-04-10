@@ -2,7 +2,7 @@ import logging
 import os
 import time
 
-from sources.base import BaseSource, JobDetail
+from jobs_agent.sources.base import BaseSource, JobDetail
 
 logger = logging.getLogger(__name__)
 

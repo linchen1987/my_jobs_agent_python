@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import logging
+import os
 import time
 from typing import List, Dict, Optional
 from tools.fetch_page import fetch_json
@@ -9,32 +10,15 @@ from tools.fetch_and_parse import fetch_and_parse_detail
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DETAIL_DELAY = 1.5
-DEFAULT_LIST_DELAY = 1.0
+DETAIL_DELAY = float(os.getenv("FETCH_DETAIL_DELAY", "3.0"))
 
 
 def fetch_and_parse_all(
     source_url_list: List[str],
     offset: int = 0,
     limit: Optional[int] = None,
-    detail_delay: float = DEFAULT_DETAIL_DELAY,
-    list_delay: float = DEFAULT_LIST_DELAY,
     analyzed_ids: Optional[set] = None,
 ) -> List[Dict]:
-    """
-    抓取所有详情页数据并返回结构化数据列表
-
-    Args:
-        source_url_list: 源URL列表
-        offset: 偏移量，从第几个开始返回 (默认0)
-        limit: 限制数量，最多返回多少条数据 (默认None，即返回全部)
-        detail_delay: 每个详情页请求之间的间隔秒数 (默认1.5s)
-        list_delay: 每个列表页请求之间的间隔秒数 (默认1.0s)
-        analyzed_ids: 已分析的帖子ID集合，跳过这些帖子的详情抓取
-
-    Returns:
-        List[Dict]: 包含详情页数据的列表，根据offset和limit参数过滤
-    """
     all_posts = []
 
     logger.info(f"fetch_list: {len(source_url_list)} source(s)")
@@ -48,9 +32,6 @@ def fetch_and_parse_all(
             all_posts.extend(posts)
         else:
             logger.error(f"fetch_list[{i}] failed: {source_url}")
-
-        if i < len(source_url_list) and list_delay > 0:
-            time.sleep(list_delay)
 
     total = len(all_posts)
     logger.info(f"fetch_list done: {total} posts")
@@ -97,8 +78,8 @@ def fetch_and_parse_all(
         else:
             logger.error(f"detail failed: {post_url}")
 
-        if i < len(filtered_posts) and detail_delay > 0:
-            time.sleep(detail_delay)
+        if i < len(filtered_posts) and DETAIL_DELAY > 0:
+            time.sleep(DETAIL_DELAY)
 
     logger.info(f"done: {success_count}/{len(filtered_posts)} details fetched")
 

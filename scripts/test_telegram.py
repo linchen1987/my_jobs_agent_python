@@ -6,13 +6,10 @@ load_dotenv()
 
 mock_jobs = [
     {
-        "original_data": {
-            "list_metadata": {
-                "url": "https://eleduck.com/tposts/gYfZOZ",
-                "id": "gYfZOZ",
-                "title": "【免费推荐/全职远程】US$4000-5000/偏后端全栈开发/加州技术公司",
-            }
-        },
+        "id": "eleduck:gYfZOZ",
+        "source": "eleduck",
+        "url": "https://eleduck.com/tposts/gYfZOZ",
+        "title": "【免费推荐/全职远程】US$4000-5000/偏后端全栈开发/加州技术公司",
         "llm_analysis": {
             "extracted_info": {
                 "company_introduction": "位于美国加州的技术公司，服务于多元化的家族办公室及其旗下投资组合公司。业务涵盖AI自动化、智能零售、房地产债务以及内部AI工具开发。",
@@ -23,13 +20,10 @@ mock_jobs = [
         },
     },
     {
-        "original_data": {
-            "list_metadata": {
-                "url": "https://eleduck.com/posts/qzfdLq",
-                "id": "qzfdLq",
-                "title": "Senior AI Video Engineer｜AI 陪伴平台｜全远程｜美国公司",
-            }
-        },
+        "id": "eleduck:qzfdLq",
+        "source": "eleduck",
+        "url": "https://eleduck.com/posts/qzfdLq",
+        "title": "Senior AI Video Engineer｜AI 陪伴平台｜全远程｜美国公司",
         "llm_analysis": {
             "extracted_info": {
                 "company_introduction": "硅谷AI陪伴产品科技公司，核心产品为AI互动平台，日活超10万，技术栈覆盖视频生成、流媒体及大模型推理。",

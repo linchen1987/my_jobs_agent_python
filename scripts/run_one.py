@@ -68,16 +68,22 @@ def process_data() -> Dict[str, Any]:
     print("\n📊 解析页面内容...")
     parsed_result = analyze_eleduck_page(temp_html_path)
 
-    # 构造job_data格式以兼容现有的分析函数
+    # 构造JobDetail格式以兼容现有的分析函数
     job_data = {
+        "id": source_detail.split("/")[-1],
+        "source": "eleduck",
+        "url": source_detail,
         "title": parsed_result.get("title", ""),
         "content": extract_text_content(parsed_result),
         "tags": parsed_result.get("tags", []),
-        "list_metadata": {
+        "list_item": {
+            "id": source_detail.split("/")[-1],
+            "source": "eleduck",
             "url": source_detail,
-            "id": source_detail.split("/")[-1],  # 从URL提取ID
             "title": parsed_result.get("title", ""),
+            "extra": {},
         },
+        "extra": {},
     }
 
     print(f"\n🔍 开始LLM分析...")
@@ -118,13 +124,11 @@ def handle_results(analysis_result: Dict[str, Any]) -> None:
 
     # 获取分析数据
     llm_analysis = analysis_result.get("llm_analysis", {})
-    original_data = analysis_result.get("original_data", {})
-    list_metadata = original_data.get("list_metadata", {})
 
     # 打印基本信息
-    print(f"📄 文章URL: {list_metadata.get('url', '未知')}")
-    print(f"📝 文章标题: {list_metadata.get('title', '未知')}")
-    print(f"🆔 文章ID: {list_metadata.get('id', '未知')}")
+    print(f"📄 文章URL: {analysis_result.get('url', '未知')}")
+    print(f"📝 文章标题: {analysis_result.get('title', '未知')}")
+    print(f"🆔 文章ID: {analysis_result.get('id', '未知')}")
 
     # 打印分析结果
     is_qualified = llm_analysis.get("is_qualified", False)

@@ -1,7 +1,7 @@
 [project]
-name = "tmp-uv-proj"
+name = "jobs-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "Job aggregation and analysis agent"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

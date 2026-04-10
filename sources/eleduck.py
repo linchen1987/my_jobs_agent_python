@@ -17,8 +17,8 @@ class EleduckSource(BaseSource):
         return "eleduck"
 
     def fetch_list(self) -> list[JobListItem]:
-        from tools.fetch_page import fetch_json
-        from tools.parse_list import parse_eleduck_list
+        from core.fetch import fetch_json
+        from sources.parsers.eleduck_list import parse_eleduck_list
 
         items: list[JobListItem] = []
         for page in range(1, self.pages + 1):
@@ -49,7 +49,7 @@ class EleduckSource(BaseSource):
         return items
 
     def fetch_detail(self, item: JobListItem) -> Optional[JobDetail]:
-        from tools.fetch_page import fetch_json
+        from core.fetch import fetch_json
 
         post_id = item["id"]
         api_url = f"https://svc.eleduck.com/api/v1/posts/{post_id}"

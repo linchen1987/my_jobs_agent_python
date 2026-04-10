@@ -12,10 +12,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 from typing import Dict, Any
 
-from tools.fetch_page import fetch_page
-from tools.parse_detail_page import analyze_eleduck_page, extract_text_content
-from tools.llm_openai import OpenAIChat
-from tools.analyze_data import analyze_job_with_llm
+from core.fetch import fetch_page
+from sources.parsers.eleduck_detail import analyze_eleduck_page, extract_text_content
+from llm.openai import OpenAIChat
+from core.analyzer import analyze_job_with_llm
 
 # 加载环境变量
 load_dotenv()

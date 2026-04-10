@@ -2,8 +2,8 @@ import json
 import logging
 import re
 from datetime import datetime
-from tools.base_llm import BaseLLM
-from tools.prompt import process_job_data
+from llm.base import BaseLLM
+from core.prompt import process_job_data
 from sources.base import JobDetail, AnalysisResult, LLMAnalysis
 
 logger = logging.getLogger(__name__)

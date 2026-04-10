@@ -7,10 +7,10 @@ from dotenv import load_dotenv
 
 from sources import create_sources_from_env
 from sources.base import BaseSource, AnalysisResult, AnalyzedRecord
-from tools.fetch_and_parse_all import fetch_and_parse_all
-from tools.llm_openai import OpenAIChat
-from tools.analyze_data import analyze_job_with_llm
-from tools.telegram import notify_jobs, is_configured as telegram_configured
+from core.pipeline import fetch_and_parse_all
+from llm.openai import OpenAIChat
+from core.analyzer import analyze_job_with_llm
+from notify.telegram import notify_jobs, is_configured as telegram_configured
 from storage import create_storage_from_env, StorageClient
 
 load_dotenv()

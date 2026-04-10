@@ -19,6 +19,7 @@ def fetch_and_parse_all(
     limit: Optional[int] = None,
     detail_delay: float = DEFAULT_DETAIL_DELAY,
     list_delay: float = DEFAULT_LIST_DELAY,
+    analyzed_ids: Optional[set] = None,
 ) -> List[Dict]:
     """
     抓取所有详情页数据并返回结构化数据列表
@@ -29,6 +30,7 @@ def fetch_and_parse_all(
         limit: 限制数量，最多返回多少条数据 (默认None，即返回全部)
         detail_delay: 每个详情页请求之间的间隔秒数 (默认1.5s)
         list_delay: 每个列表页请求之间的间隔秒数 (默认1.0s)
+        analyzed_ids: 已分析的帖子ID集合，跳过这些帖子的详情抓取
 
     Returns:
         List[Dict]: 包含详情页数据的列表，根据offset和limit参数过滤
@@ -64,6 +66,15 @@ def fetch_and_parse_all(
         )
     else:
         filtered_posts = all_posts
+
+    if analyzed_ids:
+        before_count = len(filtered_posts)
+        filtered_posts = [
+            p for p in filtered_posts if p.get("id", "") not in analyzed_ids
+        ]
+        skipped = before_count - len(filtered_posts)
+        if skipped > 0:
+            logger.info(f"dedup: skipped {skipped} already analyzed posts")
 
     all_details = []
     success_count = 0

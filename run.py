@@ -22,7 +22,10 @@ from storage import create_storage_from_env, StorageClient
 # 加载环境变量
 load_dotenv()
 
-source_list: list[str] = ["https://svc.eleduck.com/api/v1/posts?page=1", "https://svc.eleduck.com/api/v1/posts?page=2"]
+source_list: list[str] = [
+    "https://svc.eleduck.com/api/v1/posts?page=1",
+    "https://svc.eleduck.com/api/v1/posts?page=2",
+]
 OFFSET = 0
 LIMIT = 0
 
@@ -209,24 +212,10 @@ async def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     print("=== 开始数据处理阶段 ===\n")
 
-    # 初始化LLM客户端
-    print("🚀 初始化LLM客户端...")
-    llm_client = OpenAIChat()
-
-    # 获取所有数据
-    print("\n📥 开始抓取数据...")
-    all_jobs_data = fetch_and_parse_all(source_list, offset=OFFSET, limit=LIMIT)
-
-    if not all_jobs_data:
-        print("❌ 没有获取到任何数据")
-        return [], []
-
-    print(f"\n📊 获取到 {len(all_jobs_data)} 个招聘信息，开始分析...")
-
     # 确保存储根目录存在
     await storage.ensure_dir(".")
 
-    # 加载已分析记录表
+    # 加载已分析记录表（提前到抓取前，用于跳过已抓取的详情页）
     analyzed_jobs = []
     analyzed_json_path = "analyzed_jobs.json"
     if await storage.exists(analyzed_json_path):
@@ -237,41 +226,39 @@ async def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
             print(f"⚠️ 加载已分析记录失败: {e}")
             analyzed_jobs = []
 
-    # 创建已分析数据的索引（基于ID）
     analyzed_ids = set()
     for record in analyzed_jobs:
         job_id = record.get("id", "")
         if job_id:
             analyzed_ids.add(job_id)
 
-    # 过滤掉已分析过的数据
-    unanalyzed_jobs_data = []
-    skipped_count = 0
+    # 初始化LLM客户端
+    print("🚀 初始化LLM客户端...")
+    llm_client = OpenAIChat()
 
-    for job_data in all_jobs_data:
-        list_metadata = job_data.get("list_metadata", {})
-        job_id = list_metadata.get("id", "")
-
-        if job_id in analyzed_ids:
-            skipped_count += 1
-        else:
-            unanalyzed_jobs_data.append(job_data)
-
-    print(
-        f"📊 过滤结果: 总共 {len(all_jobs_data)} 个招聘信息，跳过 {skipped_count} 个已分析的，需要分析 {len(unanalyzed_jobs_data)} 个新的"
+    # 获取所有数据（传入 analyzed_ids 跳过已分析的详情页抓取）
+    print(f"\n📥 开始抓取数据...（跳过 {len(analyzed_ids)} 个已分析的）")
+    all_jobs_data = fetch_and_parse_all(
+        source_list, offset=OFFSET, limit=LIMIT, analyzed_ids=analyzed_ids
     )
 
-    # 分析过滤后的招聘信息
+    if not all_jobs_data:
+        print("❌ 没有获取到新的数据")
+        return [], []
+
+    print(f"\n📊 获取到 {len(all_jobs_data)} 个新招聘信息，开始分析...")
+
+    # 分析招聘信息
     new_qualified_jobs = []
     new_analyzed_records = []
     current_time = datetime.now().isoformat()
 
-    for i, job_data in enumerate(unanalyzed_jobs_data, 1):
+    for i, job_data in enumerate(all_jobs_data, 1):
         list_metadata = job_data.get("list_metadata", {})
         job_id = list_metadata.get("id", "")
         job_url = list_metadata.get("url", "")
 
-        print(f"\n[{i}/{len(unanalyzed_jobs_data)}] 分析中: {job_id}")
+        print(f"\n[{i}/{len(all_jobs_data)}] 分析中: {job_id}")
 
         # 使用LLM分析
         analysis_result = analyze_job_with_llm(llm_client, job_data)
@@ -299,7 +286,7 @@ async def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
             print("❌ 不符合条件")
 
     print(
-        f"\n📈 数据处理完成！跳过 {skipped_count} 个已分析项，新增 {len(new_qualified_jobs)} 个符合条件的招聘信息"
+        f"\n📈 数据处理完成！跳过 {len(analyzed_ids)} 个已分析项，新增 {len(new_qualified_jobs)} 个符合条件的招聘信息"
     )
 
     return new_analyzed_records, new_qualified_jobs

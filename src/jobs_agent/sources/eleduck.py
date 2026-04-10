@@ -1,7 +1,9 @@
 import logging
 from typing import Optional
 
+from jobs_agent.core.fetch import fetch_json
 from jobs_agent.sources.base import BaseSource, JobListItem, JobDetail
+from jobs_agent.sources.parsers.eleduck_list import parse_eleduck_list
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +19,6 @@ class EleduckSource(BaseSource):
         return "eleduck"
 
     def fetch_list(self) -> list[JobListItem]:
-        from jobs_agent.core.fetch import fetch_json
-        from jobs_agent.sources.parsers.eleduck_list import parse_eleduck_list
-
         items: list[JobListItem] = []
         for page in range(1, self.pages + 1):
             url = f"https://svc.eleduck.com/api/v1/posts?page={page}"
@@ -49,8 +48,6 @@ class EleduckSource(BaseSource):
         return items
 
     def fetch_detail(self, item: JobListItem) -> Optional[JobDetail]:
-        from jobs_agent.core.fetch import fetch_json
-
         post_id = item["id"]
         api_url = f"https://svc.eleduck.com/api/v1/posts/{post_id}"
         data = fetch_json(api_url)

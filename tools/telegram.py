@@ -55,13 +55,11 @@ def format_jobs_message(jobs: List[Dict[str, Any]]) -> str:
     lines = [f"🔔 发现 {len(jobs)} 个新的符合条件的招聘信息：\n"]
 
     for i, job in enumerate(jobs, 1):
-        original_data = job.get("original_data", {})
-        list_metadata = original_data.get("list_metadata", {})
+        url = job.get("url", "")
+        title = job.get("title", "")
         llm_analysis = job.get("llm_analysis", {})
         extracted_info = llm_analysis.get("extracted_info", {})
 
-        url = list_metadata.get("url", "")
-        title = list_metadata.get("title", "")
         company_intro = extracted_info.get("company_introduction", "未提及")
         skill_req = extracted_info.get("skill_requirements", "未提及")
         salary = extracted_info.get("salary_benefits", "未提及")

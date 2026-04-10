@@ -27,3 +27,41 @@
 ### 手动触发
 
 进入 **Actions** 页面，选择 **Daily Job Agent** workflow，点击 **Run workflow** 即可手动触发执行。
+
+## 本地开发
+
+```bash
+# 安装依赖
+uv sync
+
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 填入必要的配置
+
+# 运行完整流程
+uv run run.py
+
+# 数据迁移（旧格式 → Phase 1 新格式，只需运行一次）
+uv run migrate.py
+```
+
+### 调试抓取
+
+通过 id 或 url 快速查看单个职位的抓取结果：
+
+```bash
+uv run debug-fetch-eleduck.py L5fbk3
+uv run debug-fetch-eleduck.py https://eleduck.com/posts/L5fbk3
+```
+
+### 测试模式
+
+通过环境变量控制抓取范围，避免全量抓取：
+
+```bash
+# 只抓第 11 条（跳过前 10 条）
+ELEDUCK_OFFSET=10 ELEDUCK_LIMIT=1 uv run run.py
+
+# 只抓 1 页，取前 2 条
+ELEDUCK_PAGES=1 ELEDUCK_OFFSET=0 ELEDUCK_LIMIT=2 uv run run.py
+```

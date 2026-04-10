@@ -1,12 +1,8 @@
-#!/usr/bin/env python3
-
 import logging
 import os
 import time
-from typing import List, Dict, Optional
-from tools.fetch_page import fetch_json
-from tools.parse_list import parse_eleduck_list
-from tools.fetch_and_parse import fetch_and_parse_detail
+
+from sources.base import BaseSource, JobDetail
 
 logger = logging.getLogger(__name__)
 
@@ -14,73 +10,35 @@ DETAIL_DELAY = float(os.getenv("FETCH_DETAIL_DELAY", "3.0"))
 
 
 def fetch_and_parse_all(
-    source_url_list: List[str],
-    offset: int = 0,
-    limit: Optional[int] = None,
-    analyzed_ids: Optional[set] = None,
-) -> List[Dict]:
-    all_posts = []
+    sources: list[BaseSource],
+    analyzed_ids: set | None = None,
+    detail_delay: float | None = None,
+) -> list[JobDetail]:
+    if detail_delay is None:
+        detail_delay = DETAIL_DELAY
 
-    logger.info(f"fetch_list: {len(source_url_list)} source(s)")
-    for i, source_url in enumerate(source_url_list, 1):
-        logger.debug(f"fetch_list[{i}]: {source_url}")
-        data = fetch_json(source_url)
+    all_details: list[JobDetail] = []
 
-        if data:
-            posts = parse_eleduck_list(data)
-            logger.debug(f"fetch_list[{i}]: parsed {len(posts)} posts")
-            all_posts.extend(posts)
-        else:
-            logger.error(f"fetch_list[{i}] failed: {source_url}")
+    for source in sources:
+        items = source.fetch_list()
+        logger.info(f"[{source.name}] list: {len(items)} items")
 
-    total = len(all_posts)
-    logger.info(f"fetch_list done: {total} posts")
+        if analyzed_ids:
+            before = len(items)
+            items = [
+                it for it in items if source.global_id(it["id"]) not in analyzed_ids
+            ]
+            logger.info(f"[{source.name}] dedup: skipped {before - len(items)}")
 
-    if offset > 0 or (limit is not None and limit > 0):
-        filtered_posts = (
-            all_posts[offset : offset + limit]
-            if limit is not None
-            else all_posts[offset:]
-        )
-        logger.info(
-            f"filter: {len(filtered_posts)}/{total} posts (offset={offset}, limit={limit})"
-        )
-    else:
-        filtered_posts = all_posts
+        for i, item in enumerate(items, 1):
+            logger.info(f"[{source.name}] [{i}/{len(items)}] {item['title']}")
 
-    if analyzed_ids:
-        before_count = len(filtered_posts)
-        filtered_posts = [
-            p for p in filtered_posts if p.get("id", "") not in analyzed_ids
-        ]
-        skipped = before_count - len(filtered_posts)
-        if skipped > 0:
-            logger.info(f"dedup: skipped {skipped} already analyzed posts")
+            detail = source.fetch_detail(item)
+            if detail:
+                all_details.append(detail)
 
-    all_details = []
-    success_count = 0
+            if i < len(items) and detail_delay > 0:
+                time.sleep(detail_delay)
 
-    for i, post in enumerate(filtered_posts, 1):
-        post_url = post.get("url", "")
-        post_title = post.get("title", "Unknown")
-        logger.info(f"[{i}/{len(filtered_posts)}] {post_title}")
-
-        if not post_url:
-            logger.warning(f"skip: no url - {post_title}")
-            continue
-
-        detail_data = fetch_and_parse_detail(post_url)
-
-        if detail_data:
-            detail_data["list_metadata"] = post
-            all_details.append(detail_data)
-            success_count += 1
-        else:
-            logger.error(f"detail failed: {post_url}")
-
-        if i < len(filtered_posts) and DETAIL_DELAY > 0:
-            time.sleep(DETAIL_DELAY)
-
-    logger.info(f"done: {success_count}/{len(filtered_posts)} details fetched")
-
+    logger.info(f"fetch_and_parse_all done: {len(all_details)} details")
     return all_details

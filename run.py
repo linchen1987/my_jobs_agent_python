@@ -1,35 +1,20 @@
-"""
-招聘信息批量分析脚本
-
-从配置的数据源批量抓取招聘信息，使用LLM分析是否符合条件，
-并保存分析结果到JSON和Markdown文件。
-"""
-
 import os
 import json
 import logging
 import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
-from typing import List, Dict, Any, Tuple
 
+from sources import create_sources_from_env
+from sources.base import BaseSource, AnalysisResult, AnalyzedRecord
 from tools.fetch_and_parse_all import fetch_and_parse_all
 from tools.llm_openai import OpenAIChat
 from tools.analyze_data import analyze_job_with_llm
 from tools.telegram import notify_jobs, is_configured as telegram_configured
 from storage import create_storage_from_env, StorageClient
 
-# 加载环境变量
 load_dotenv()
 
-source_list: list[str] = [
-    "https://svc.eleduck.com/api/v1/posts?page=1",
-    "https://svc.eleduck.com/api/v1/posts?page=2",
-]
-OFFSET = 0
-LIMIT = 0
-
-# 配置日志
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, log_level),
@@ -37,210 +22,136 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-# 全局存储客户端
+logger = logging.getLogger(__name__)
+
 storage: StorageClient = None
 
 
-async def save_notifications(new_qualified_jobs: List[Dict[str, Any]]) -> None:
-    """
-    保存新的符合条件的职位到通知文件
+def _clean_text(text):
+    if not text or text == "未提及":
+        return "未提及"
+    return str(text).replace("\n", " ").replace("|", "｜").strip()
 
-    Args:
-        new_qualified_jobs: 新的符合条件的职位列表
-    """
+
+def _truncate_text(text, max_length=100):
+    if len(text) > max_length:
+        return text[:max_length] + "..."
+    return text
+
+
+def _extract_job_fields(job: AnalysisResult) -> dict:
+    llm_analysis = job.get("llm_analysis", {})
+    extracted_info = llm_analysis.get("extracted_info", {})
+    return {
+        "url": job.get("url", ""),
+        "id": job.get("id", ""),
+        "title": job.get("title", ""),
+        "company_intro": extracted_info.get("company_introduction", "未提及"),
+        "company_website": extracted_info.get("company_website", "未提及"),
+        "skill_req": extracted_info.get("skill_requirements", "未提及"),
+        "salary": extracted_info.get("salary_benefits", "未提及"),
+    }
+
+
+def create_notification_markdown(qualified_jobs: list[AnalysisResult]) -> str:
+    if not qualified_jobs:
+        return ""
+
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    markdown = f"# 新职位通知 - {current_time}\n\n"
+    markdown += f"发现 {len(qualified_jobs)} 个新的符合条件的招聘信息：\n\n"
+    markdown += "| URL | ID | 公司介绍 | 公司网站 | 技能要求 | 薪资待遇 |\n"
+    markdown += "|-----|----|---------|---------|---------|---------|\n"
+
+    for job in qualified_jobs:
+        f = _extract_job_fields(job)
+        company_intro = _truncate_text(_clean_text(f["company_intro"]))
+        skill_req = _truncate_text(_clean_text(f["skill_req"]))
+        company_website = _clean_text(f["company_website"])
+        salary = _clean_text(f["salary"])
+
+        markdown += f"| [{f['id']}]({f['url']}) | {f['id']} | {company_intro} | {company_website} | {skill_req} | {salary} |\n"
+
+    return markdown
+
+
+def create_markdown_table(qualified_jobs: list[AnalysisResult]) -> str:
+    if not qualified_jobs:
+        return "## 分析结果\n\n暂无符合条件的招聘信息。\n"
+
+    markdown = "## 招聘信息分析结果\n\n"
+    markdown += f"共找到 {len(qualified_jobs)} 个符合条件的招聘信息：\n\n"
+    markdown += "| URL | ID | 公司介绍 | 公司网站 | 技能要求 | 薪资待遇 |\n"
+    markdown += "|-----|----|---------|---------|---------|---------|\n"
+
+    for job in qualified_jobs:
+        f = _extract_job_fields(job)
+        company_intro = _truncate_text(_clean_text(f["company_intro"]))
+        skill_req = _truncate_text(_clean_text(f["skill_req"]))
+        company_website = _clean_text(f["company_website"])
+        salary = _clean_text(f["salary"])
+
+        markdown += f"| [{f['id']}]({f['url']}) | {f['id']} | {company_intro} | {company_website} | {skill_req} | {salary} |\n"
+
+    return markdown
+
+
+async def save_notifications(new_qualified_jobs: list[AnalysisResult]) -> None:
     if not new_qualified_jobs:
         return
 
     notifications_path = "jobs_notifications.md"
-
-    # 生成新通知的Markdown内容
     new_notification_content = create_notification_markdown(new_qualified_jobs)
 
-    # 加载现有通知内容
     existing_content = ""
     if await storage.exists(notifications_path):
         try:
             existing_content = await storage.read_text(notifications_path)
         except Exception as e:
-            print(f"⚠️ 加载现有通知失败: {e}")
+            logger.warning(f"加载现有通知失败: {e}")
             existing_content = ""
 
-    # 合并内容：新通知在前面
     if existing_content:
         all_content = new_notification_content + "\n---\n\n" + existing_content
     else:
         all_content = new_notification_content
 
-    # 保存通知文件
     try:
         await storage.write_text(notifications_path, all_content)
         print(
             f"\n📢 发现 {len(new_qualified_jobs)} 个新职位，已保存到 {notifications_path}"
         )
     except Exception as e:
-        print(f"❌ 保存通知失败: {e}")
+        logger.error(f"保存通知失败: {e}")
 
 
-def create_notification_markdown(qualified_jobs: List[Dict[str, Any]]) -> str:
-    """
-    创建新职位通知的Markdown内容
-
-    Args:
-        qualified_jobs: 符合条件的职位列表
-
-    Returns:
-        str: 格式化的Markdown通知内容
-    """
-    if not qualified_jobs:
-        return ""
-
-    # 获取当前时间
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # 创建通知内容
-    markdown = f"# 新职位通知 - {current_time}\n\n"
-    markdown += f"发现 {len(qualified_jobs)} 个新的符合条件的招聘信息：\n\n"
-    markdown += "| URL | ID | 公司介绍 | 公司网站 | 技能要求 | 薪资待遇 |\n"
-    markdown += "|-----|----|---------|---------|---------|---------|\n"
-
-    # 添加每行数据
-    for job in qualified_jobs:
-        original_data = job.get("original_data", {})
-        list_metadata = original_data.get("list_metadata", {})
-        llm_analysis = job.get("llm_analysis", {})
-        extracted_info = llm_analysis.get("extracted_info", {})
-
-        # 获取各字段信息
-        url = list_metadata.get("url", "")
-        job_id = list_metadata.get("id", "")
-        company_intro = extracted_info.get("company_introduction", "未提及")
-        company_website = extracted_info.get("company_website", "未提及")
-        skill_req = extracted_info.get("skill_requirements", "未提及")
-        salary = extracted_info.get("salary_benefits", "未提及")
-
-        # 清理文本中的换行符和管道符
-        def clean_text(text):
-            if not text or text == "未提及":
-                return "未提及"
-            return str(text).replace("\n", " ").replace("|", "｜").strip()
-
-        company_intro = clean_text(company_intro)
-        company_website = clean_text(company_website)
-        skill_req = clean_text(skill_req)
-        salary = clean_text(salary)
-
-        # 限制长度避免表格过宽
-        def truncate_text(text, max_length=100):
-            if len(text) > max_length:
-                return text[:max_length] + "..."
-            return text
-
-        company_intro = truncate_text(company_intro)
-        skill_req = truncate_text(skill_req)
-
-        markdown += f"| [{job_id}]({url}) | {job_id} | {company_intro} | {company_website} | {skill_req} | {salary} |\n"
-
-    return markdown
-
-
-def create_markdown_table(qualified_jobs: List[Dict[str, Any]]) -> str:
-    """
-    创建包含合格职位的Markdown表格
-
-    Args:
-        qualified_jobs: 通过筛选的职位列表
-
-    Returns:
-        str: 格式化的Markdown表格
-    """
-    if not qualified_jobs:
-        return "## 分析结果\n\n暂无符合条件的招聘信息。\n"
-
-    # 创建表格头
-    markdown = "## 招聘信息分析结果\n\n"
-    markdown += f"共找到 {len(qualified_jobs)} 个符合条件的招聘信息：\n\n"
-    markdown += "| URL | ID | 公司介绍 | 公司网站 | 技能要求 | 薪资待遇 |\n"
-    markdown += "|-----|----|---------|---------|---------|---------|\n"
-
-    # 添加每行数据
-    for job in qualified_jobs:
-        original_data = job.get("original_data", {})
-        list_metadata = original_data.get("list_metadata", {})
-        llm_analysis = job.get("llm_analysis", {})
-        extracted_info = llm_analysis.get("extracted_info", {})
-
-        # 获取各字段信息
-        url = list_metadata.get("url", "")
-        job_id = list_metadata.get("id", "")
-        company_intro = extracted_info.get("company_introduction", "未提及")
-        company_website = extracted_info.get("company_website", "未提及")
-        skill_req = extracted_info.get("skill_requirements", "未提及")
-        salary = extracted_info.get("salary_benefits", "未提及")
-
-        # 清理文本中的换行符和管道符
-        def clean_text(text):
-            if not text or text == "未提及":
-                return "未提及"
-            return str(text).replace("\n", " ").replace("|", "｜").strip()
-
-        company_intro = clean_text(company_intro)
-        company_website = clean_text(company_website)
-        skill_req = clean_text(skill_req)
-        salary = clean_text(salary)
-
-        # 限制长度避免表格过宽
-        def truncate_text(text, max_length=100):
-            if len(text) > max_length:
-                return text[:max_length] + "..."
-            return text
-
-        company_intro = truncate_text(company_intro)
-        skill_req = truncate_text(skill_req)
-
-        markdown += f"| [{job_id}]({url}) | {job_id} | {company_intro} | {company_website} | {skill_req} | {salary} |\n"
-
-    return markdown
-
-
-async def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """
-    数据处理函数：负责抓取数据、分析招聘信息
-
-    Returns:
-        Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        (new_analyzed_records, new_qualified_jobs)
-    """
+async def process_data(
+    sources: list[BaseSource],
+) -> tuple[list[AnalyzedRecord], list[AnalysisResult]]:
     print("=== 开始数据处理阶段 ===\n")
 
-    # 确保存储根目录存在
     await storage.ensure_dir(".")
 
-    # 加载已分析记录表（提前到抓取前，用于跳过已抓取的详情页）
-    analyzed_jobs = []
+    analyzed_jobs: list[dict] = []
     analyzed_json_path = "analyzed_jobs.json"
     if await storage.exists(analyzed_json_path):
         try:
             content = await storage.read_text(analyzed_json_path)
             analyzed_jobs = json.loads(content)
         except Exception as e:
-            print(f"⚠️ 加载已分析记录失败: {e}")
+            logger.warning(f"加载已分析记录失败: {e}")
             analyzed_jobs = []
 
-    analyzed_ids = set()
-    for record in analyzed_jobs:
-        job_id = record.get("id", "")
-        if job_id:
-            analyzed_ids.add(job_id)
+    analyzed_ids = {
+        record.get("id", "") for record in analyzed_jobs if record.get("id")
+    }
 
-    # 初始化LLM客户端
     print("🚀 初始化LLM客户端...")
     llm_client = OpenAIChat()
 
-    # 获取所有数据（传入 analyzed_ids 跳过已分析的详情页抓取）
     print(f"\n📥 开始抓取数据...（跳过 {len(analyzed_ids)} 个已分析的）")
-    all_jobs_data = fetch_and_parse_all(
-        source_list, offset=OFFSET, limit=LIMIT, analyzed_ids=analyzed_ids
-    )
+    all_jobs_data = fetch_and_parse_all(sources, analyzed_ids=analyzed_ids)
 
     if not all_jobs_data:
         print("❌ 没有获取到新的数据")
@@ -248,39 +159,35 @@ async def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
 
     print(f"\n📊 获取到 {len(all_jobs_data)} 个新招聘信息，开始分析...")
 
-    # 分析招聘信息
-    new_qualified_jobs = []
-    new_analyzed_records = []
-    current_time = datetime.now().isoformat()
+    new_qualified_jobs: list[AnalysisResult] = []
+    new_analyzed_records: list[AnalyzedRecord] = []
 
-    for i, job_data in enumerate(all_jobs_data, 1):
-        list_metadata = job_data.get("list_metadata", {})
-        job_id = list_metadata.get("id", "")
-        job_url = list_metadata.get("url", "")
+    for i, detail in enumerate(all_jobs_data, 1):
+        print(f"\n[{i}/{len(all_jobs_data)}] 分析中: {detail['id']}")
 
-        print(f"\n[{i}/{len(all_jobs_data)}] 分析中: {job_id}")
+        try:
+            result = analyze_job_with_llm(llm_client, detail)
+        except Exception as e:
+            logger.error(f"分析失败 {detail['id']}: {e}")
+            continue
 
-        # 使用LLM分析
-        analysis_result = analyze_job_with_llm(llm_client, job_data)
-
-        # 检查是否符合条件
-        llm_analysis = analysis_result.get("llm_analysis", {})
+        llm_analysis = result["llm_analysis"]
         is_qualified = llm_analysis.get("is_qualified", False)
-        analysis_detail = llm_analysis.get("analysis", {})
-        qualification_reason = analysis_detail.get("reasoning", "")
+        reason = llm_analysis.get("analysis", {}).get("reasoning", "")
 
-        # 记录到已分析表中
-        analyzed_record = {
-            "id": job_id,
-            "url": job_url,
-            "is_qualified": is_qualified,
-            "createdAt": current_time,
-            "reason": qualification_reason,
-        }
-        new_analyzed_records.append(analyzed_record)
+        new_analyzed_records.append(
+            {
+                "id": result["id"],
+                "source": result["source"],
+                "url": result["url"],
+                "is_qualified": is_qualified,
+                "analyzed_at": result["analyzed_at"],
+                "reason": reason,
+            }
+        )
 
         if is_qualified:
-            new_qualified_jobs.append(analysis_result)
+            new_qualified_jobs.append(result)
             print("✅ 符合条件")
         else:
             print("❌ 不符合条件")
@@ -293,72 +200,41 @@ async def process_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
 
 
 async def handle_results(
-    new_analyzed_records: List[Dict[str, Any]], new_qualified_jobs: List[Dict[str, Any]]
+    new_analyzed_records: list[AnalyzedRecord],
+    new_qualified_jobs: list[AnalysisResult],
 ) -> None:
-    """
-    后续动作函数：负责存储、通知等操作
-
-    Args:
-        new_analyzed_records: 新的已分析记录列表
-        new_qualified_jobs: 新的符合条件的职位列表
-    """
     print("\n=== 开始后续动作阶段 ===\n")
 
-    # 加载现有数据
     analyzed_json_path = "analyzed_jobs.json"
-    jobs_json_path = "jobs.json"
 
-    # 加载现有的已分析记录
-    existing_analyzed_jobs = []
+    existing_analyzed_jobs: list[dict] = []
     if await storage.exists(analyzed_json_path):
         try:
             content = await storage.read_text(analyzed_json_path)
             existing_analyzed_jobs = json.loads(content)
         except Exception as e:
-            print(f"⚠️ 加载现有已分析记录失败: {e}")
+            logger.warning(f"加载现有已分析记录失败: {e}")
             existing_analyzed_jobs = []
 
-    # 加载现有的符合条件的结果
-    existing_qualified_results = []
-    if await storage.exists(jobs_json_path):
-        try:
-            content = await storage.read_text(jobs_json_path)
-            existing_qualified_results = json.loads(content)
-        except Exception as e:
-            print(f"⚠️ 加载现有符合条件结果失败: {e}")
-            existing_qualified_results = []
-
-    # 更新已分析记录表：新记录在前面
     all_analyzed_jobs = new_analyzed_records + existing_analyzed_jobs
 
-    # 保存已分析记录表
     print(f"💾 保存已分析记录表...（总共 {len(all_analyzed_jobs)} 个已分析记录）")
     await storage.write_text(
         analyzed_json_path, json.dumps(all_analyzed_jobs, ensure_ascii=False, indent=2)
     )
 
-    # 合并符合条件的数据：新数据在前面
-    all_qualified_jobs = new_qualified_jobs + existing_qualified_results
+    save_jobs_md = os.getenv("SAVE_JOBS_MD", "false").lower() in ("true", "1")
+    if save_jobs_md and new_qualified_jobs:
+        print("📝 生成Markdown报告...")
+        markdown_content = create_markdown_table(new_qualified_jobs)
+        await storage.write_text("jobs.md", markdown_content)
+        print("✅ 报告已保存到 jobs.md")
 
-    # 保存符合条件的JSON文件
-    print(
-        f"💾 保存符合条件的数据...（总共 {len(all_qualified_jobs)} 个符合条件的招聘信息）"
+    save_notifications_flag = os.getenv("SAVE_NOTIFICATIONS", "false").lower() in (
+        "true",
+        "1",
     )
-    await storage.write_text(
-        jobs_json_path, json.dumps(all_qualified_jobs, ensure_ascii=False, indent=2)
-    )
-
-    # 生成Markdown
-    print("📝 生成Markdown报告...")
-    markdown_content = create_markdown_table(all_qualified_jobs)
-
-    # 写入文件
-    await storage.write_text("jobs.md", markdown_content)
-
-    print("✅ 报告已保存到 jobs.json 和 jobs.md")
-
-    # 保存新的符合条件的职位到通知文件
-    if new_qualified_jobs:
+    if save_notifications_flag and new_qualified_jobs:
         await save_notifications(new_qualified_jobs)
 
     if new_qualified_jobs and telegram_configured():
@@ -371,30 +247,27 @@ async def handle_results(
 
 
 async def main():
-    """主函数：协调数据处理和后续动作"""
     global storage
 
     print("=== 开始招聘信息分析流程 ===\n")
 
-    # 初始化存储客户端
     storage = create_storage_from_env()
     storage_type = os.getenv("STORAGE_TYPE", "local")
     print(f"📦 存储类型: {storage_type}\n")
 
     try:
-        # 第一阶段：数据处理
-        new_analyzed_records, new_qualified_jobs = await process_data()
+        sources = create_sources_from_env()
+        if not sources:
+            print("❌ 没有可用的数据源")
+            return
 
-        # 第二阶段：后续动作
+        new_analyzed_records, new_qualified_jobs = await process_data(sources)
         await handle_results(new_analyzed_records, new_qualified_jobs)
 
         print(f"\n🎉 流程完成！新增 {len(new_qualified_jobs)} 个符合条件的招聘信息")
 
     except Exception as e:
-        print(f"❌ 程序执行出错: {e}")
-        import traceback
-
-        traceback.print_exc()
+        logger.error(f"程序执行出错: {e}", exc_info=True)
 
 
 if __name__ == "__main__":

@@ -19,3 +19,5 @@ wheels/
 !.env.example
 *.log
 *.local
+
+/job_agent_data

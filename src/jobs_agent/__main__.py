@@ -10,7 +10,7 @@ from jobs_agent.sources.base import BaseSource, AnalysisResult, AnalyzedRecord
 from jobs_agent.core.pipeline import fetch_and_parse_all
 from jobs_agent.llm.openai import OpenAIChat
 from jobs_agent.core.analyzer import analyze_job_with_llm
-from jobs_agent.notify.telegram import notify_jobs, is_configured as telegram_configured
+from jobs_agent.notify.telegram import notify_jobs, send_message, is_configured as telegram_configured
 from jobs_agent.storage import create_storage_from_env, StorageClient
 
 load_dotenv()
@@ -237,13 +237,17 @@ async def handle_results(
     if save_notifications_flag and new_qualified_jobs:
         await save_notifications(new_qualified_jobs)
 
-    if new_qualified_jobs and telegram_configured():
-        print("📲 发送 Telegram 通知...")
-        success = notify_jobs(new_qualified_jobs)
-        if success:
-            print("✅ Telegram 通知已发送")
+    if telegram_configured():
+        if new_qualified_jobs:
+            print("📲 发送 Telegram 通知...")
+            success = notify_jobs(new_qualified_jobs)
+            if success:
+                print("✅ Telegram 通知已发送")
+            else:
+                print("⚠️ Telegram 通知发送失败")
         else:
-            print("⚠️ Telegram 通知发送失败")
+            print("📲 发送 Telegram 通知（无新数据）...")
+            send_message("📭 本次执行未发现新的招聘信息。")
 
 
 async def main():
